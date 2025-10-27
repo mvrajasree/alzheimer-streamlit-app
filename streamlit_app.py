@@ -59,28 +59,36 @@ def preprocess_image(image_bytes):
     return np.expand_dims(img, axis=0)
 
 
-def preprocess_clinical(user_input_map, scaler, features):
+def preprocess_clinical(user_input_dict, scaler, features):
     """
-    Converts user input to standardized NumPy array using the fitted scaler.
-    Automatically aligns feature names and fills missing ones safely.
+    Converts user input to a standardized NumPy array using the fitted scaler.
+    Automatically aligns feature names, ignoring mismatched names safely.
     """
+    # Get the feature names the scaler was trained on
     scaler_features = list(getattr(scaler, "feature_names_in_", features))
+
+    # Create a DataFrame with placeholders (1.0) for all expected scaler features
     df = pd.DataFrame(np.ones((1, len(scaler_features))), columns=scaler_features)
-    lower_map = {c.lower(): c for c in scaler_features}
 
-    for user_feature, value in user_input_map.items():
-        match_key = user_feature.lower()
-        if match_key in lower_map:
-            df.at[0, lower_map[match_key]] = value
+    # Case-insensitive mapping between user input and scaler features
+    lower_map = {f.lower(): f for f in scaler_features}
+
+    # Fill values from user inputs wherever they match (case-insensitive)
+    for k, v in user_input_dict.items():
+        key = k.lower()
+        if key in lower_map:
+            df.at[0, lower_map[key]] = v
         else:
-            st.sidebar.info(f"ℹ️ Ignored unmatched feature: '{user_feature}'")
+            st.sidebar.warning(f"Ignored unmatched feature: '{k}'")
 
+    # Apply scaling safely using the correct column order
     df_scaled = pd.DataFrame(
         scaler.transform(df[scaler_features]),
         columns=scaler_features
     )
 
     return df_scaled.values
+
 
 
 # --- 3. STREAMLIT APP UI ---
