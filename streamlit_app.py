@@ -30,17 +30,48 @@ def load_assets():
         
         # The list of clinical features must be defined here, 
         # exactly as they were used in the aligned training data (35 features)
-        CLINICAL_FEATURES = [
-            'age', 'gender_numeric', 'education_level', 'bmi', 'systolic_bp', 
-            'diastolic_bp', 'heart_rate', 'cholesterol', 'triglycerides', 'hdl', 
-            'ldl', 'smoking_status_numeric', 'alcohol_consumption', 'physical_activity_level', 
-            'sleep_quality', 'stress_level', 'family_history_alzheimers_numeric', 
-            'apoe_e4_status_numeric', 'hba1c_level', 'cortisol_level', 'vitamin_d_level', 
-            'b12_level', 'folate_level', 'thyroid_hormone_level', 'crp_level', 
-            'eeg_alpha_power', 'eeg_beta_power', 'eeg_theta_power', 'eeg_delta_power', 
-            'mri_hippocampal_volume', 'mri_cortical_thickness', 'mri_ventricular_size',
-            'mri_amygdala_volume', 'mri_white_matter_lesion_load', 'diabetes_status_numeric'
-        ]
+        # --- CORRECTED CLINICAL_FEATURES LIST ---
+CLINICAL_FEATURES = [
+    'Age', 
+    'Gender',
+    'EducationLevel', 
+    'BMI', 
+    'SystolicBP', 
+    'DiastolicBP', 
+    'HeartRate', 
+    'Cholesterol', 
+    'Triglycerides', 
+    'HDL', 
+    'LDL', 
+    'SmokingStatus', 
+    'AlcoholConsumption', 
+    'PhysicalActivityLevel', 
+    'SleepQuality', 
+    'StressLevel', 
+    'FamilyHistoryAlzheimers', 
+    'APOEE4Status', 
+    'HBA1CLevel', 
+    'CortisolLevel', 
+    'VitaminDLevel', 
+    'B12Level', 
+    'FolateLevel', 
+    'ThyroidHormoneLevel', 
+    'CRPLevel', 
+    'EEGAlphaPower', 
+    'EEGBetaPower', 
+    'EEGThetaPower', 
+    'EEGDeltaPower', 
+    'MRIHippocampalVolume', 
+    'MRICorticalThickness', 
+    'MRIVentricularSize',
+    'MRIAmygdalaVolume', 
+    'MRIWhiteMatterLesionLoad', 
+    'DiabetesStatus'
+]
+
+# NOTE: The list above is an educated guess based on common clinical feature naming 
+# and the error message's 'Seen at fit time' section. You should check the column names 
+# of the DataFrame you used right before saving the scaler to be 100% certain.
         
         return model, scaler, CLINICAL_FEATURES
     except Exception as e:
