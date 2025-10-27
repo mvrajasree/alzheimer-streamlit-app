@@ -8,8 +8,6 @@ import cv2
 from PIL import Image
 import os
 
---- 1. CONFIGURATION AND MODEL LOADING ---
-
 MODEL_DIR = 'models'
 MODEL_PATH = os.path.join(MODEL_DIR, 'multimodal_nn_model.keras')
 SCALER_PATH = os.path.join(MODEL_DIR, 'clinical_scaler.joblib')
