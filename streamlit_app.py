@@ -31,44 +31,19 @@ def load_assets():
         # The list of clinical features must be defined here, 
         # exactly as they were used in the aligned training data (35 features)
         # --- CORRECTED CLINICAL_FEATURES LIST ---
+# --- CORRECTED CLINICAL_FEATURES LIST (35 features) ---
+# NOTE: The capitalization and removal of '_numeric' suffixes must match the fitted scaler.
 CLINICAL_FEATURES = [
-    'Age', 
-    'Gender',
-    'EducationLevel', 
-    'BMI', 
-    'SystolicBP', 
-    'DiastolicBP', 
-    'HeartRate', 
-    'Cholesterol', 
-    'Triglycerides', 
-    'HDL', 
-    'LDL', 
-    'SmokingStatus', 
-    'AlcoholConsumption', 
-    'PhysicalActivityLevel', 
-    'SleepQuality', 
-    'StressLevel', 
-    'FamilyHistoryAlzheimers', 
-    'APOEE4Status', 
-    'HBA1CLevel', 
-    'CortisolLevel', 
-    'VitaminDLevel', 
-    'B12Level', 
-    'FolateLevel', 
-    'ThyroidHormoneLevel', 
-    'CRPLevel', 
-    'EEGAlphaPower', 
-    'EEGBetaPower', 
-    'EEGThetaPower', 
-    'EEGDeltaPower', 
-    'MRIHippocampalVolume', 
-    'MRICorticalThickness', 
-    'MRIVentricularSize',
-    'MRIAmygdalaVolume', 
-    'MRIWhiteMatterLesionLoad', 
-    'DiabetesStatus'
+    'Age', 'Gender', 'EducationLevel', 'BMI', 'SystolicBP', 
+    'DiastolicBP', 'HeartRate', 'Cholesterol', 'Triglycerides', 'HDL', 
+    'LDL', 'SmokingStatus', 'AlcoholConsumption', 'PhysicalActivityLevel', 
+    'SleepQuality', 'StressLevel', 'FamilyHistoryAlzheimers', 
+    'APOEE4Status', 'HBA1CLevel', 'CortisolLevel', 'VitaminDLevel', 
+    'B12Level', 'FolateLevel', 'ThyroidHormoneLevel', 'CRPLevel', 
+    'EEGAlphaPower', 'EEGBetaPower', 'EEGThetaPower', 'EEGDeltaPower', 
+    'MRIHippocampalVolume', 'MRICorticalThickness', 'MRIVentricularSize',
+    'MRIAmygdalaVolume', 'MRIWhiteMatterLesionLoad', 'DiabetesStatus'
 ]
-
 # NOTE: The list above is an educated guess based on common clinical feature naming 
 # and the error message's 'Seen at fit time' section. You should check the column names 
 # of the DataFrame you used right before saving the scaler to be 100% certain.
