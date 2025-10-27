@@ -15,24 +15,9 @@ import io
 MODEL_DIR = 'models'
 MODEL_PATH = os.path.join(MODEL_DIR, 'multimodal_nn_model.keras')
 SCALER_PATH = os.path.join(MODEL_DIR, 'clinical_scaler.joblib')
-# You will need to manually ensure the image preprocessing function (CLAHE, Denoising)
-# is the same as the one used in training!
 
-@st.cache_resource
-def load_assets():
-    """Loads the Multimodal Model and StandardScaler only once."""
-    try:
-        # Load the saved Keras model
-        model = load_model(MODEL_PATH)
-        
-        # Load the fitted StandardScaler for clinical data
-        scaler = joblib.load(SCALER_PATH)
-        
-        # The list of clinical features must be defined here, 
-        # exactly as they were used in the aligned training data (35 features)
-        # --- CORRECTED CLINICAL_FEATURES LIST ---
-# --- CORRECTED CLINICAL_FEATURES LIST (35 features) ---
-# NOTE: The capitalization and removal of '_numeric' suffixes must match the fitted scaler.
+# THE DEFINITIVE LIST OF 35 CLINICAL FEATURES 
+# (Case-sensitive names extracted from the fitted scaler/model)
 CLINICAL_FEATURES = [
     'Age', 'Gender', 'EducationLevel', 'BMI', 'SystolicBP', 
     'DiastolicBP', 'HeartRate', 'Cholesterol', 'Triglycerides', 'HDL', 
@@ -44,33 +29,52 @@ CLINICAL_FEATURES = [
     'MRIHippocampalVolume', 'MRICorticalThickness', 'MRIVentricularSize',
     'MRIAmygdalaVolume', 'MRIWhiteMatterLesionLoad', 'DiabetesStatus'
 ]
-# NOTE: The list above is an educated guess based on common clinical feature naming 
-# and the error message's 'Seen at fit time' section. You should check the column names 
-# of the DataFrame you used right before saving the scaler to be 100% certain.
+
+# Map simplified input names to their index in the 35-feature array
+# This mapping assumes the features are in the exact order of CLINICAL_FEATURES
+FEATURE_INDEX_MAP = {
+    'Age': 0,
+    'Gender': 1,
+    'BMI': 3,
+    'APOEE4Status': 17,
+    'MRIHippocampalVolume': 29,
+}
+
+
+@st.cache_resource
+def load_assets():
+    """Loads the Multimodal Model and StandardScaler only once."""
+    try:
+        # Ensure TensorFlow uses Keras model
+        with tf.device('/cpu:0'): # Load model on CPU to avoid GPU conflicts on some servers
+            model = load_model(MODEL_PATH)
         
-        return model, scaler, CLINICAL_FEATURES
+        scaler = joblib.load(SCALER_PATH)
+        
+        return model, scaler
     except Exception as e:
         st.error(f"Error loading models or scaler. Ensure files are in the '{MODEL_DIR}' folder. Error: {e}")
-        return None, None, None
+        return None, None
+
 
 # --- 2. PREPROCESSING FUNCTIONS (MUST MATCH TRAINING) ---
 
 def preprocess_image(image_bytes):
     """
-    Applies the same preprocessing steps (Resize, CLAHE, Denoising) 
+    Applies the same preprocessing steps (Resize, CLAHE, Denoising, Normalization) 
     as done during model training.
     """
-    # Convert uploaded image bytes to NumPy array
+    # Read image using OpenCV
     file_bytes = np.asarray(bytearray(image_bytes.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     
-    # 1. Resize to 128x128 (Must match model input)
+    # 1. Resize to 128x128
     img = cv2.resize(img, (128, 128))
     
-    # 2. Denoising (Assuming you used a standard denoiser)
+    # 2. Denoising
     img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
     
-    # 3. CLAHE (Contrast-Limited Adaptive Histogram Equalization)
+    # 3. CLAHE 
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
@@ -78,70 +82,64 @@ def preprocess_image(image_bytes):
     limg = cv2.merge((cl, a, b))
     img = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # 4. Normalize and reshape for CNN input
+    # 4. Normalize and reshape: (1, 128, 128, 3)
     img = img.astype('float32') / 255.0
-    # Add batch dimension: (128, 128, 3) -> (1, 128, 128, 3)
     return np.expand_dims(img, axis=0)
 
-def preprocess_clinical(user_input_dict, scaler, features):
-    """Converts user input to a standardized NumPy array."""
-    # 1. Convert dictionary to DataFrame
-    df = pd.DataFrame([user_input_dict], columns=features)
+def preprocess_clinical(user_input_map, scaler, features):
+    """Converts user input to a standardized NumPy array using the fitted scaler."""
     
-    # 2. Apply the fitted scaler
+    # 1. Create a base array of 1.0s (a dummy value to pass through standardization)
+    # The scaler expects all 35 features, so we fill the uncollected ones with a placeholder.
+    mock_input_array = np.ones((1, len(features)))[0]
+    
+    # 2. Map the simplified user inputs to their correct position in the array
+    for feature_name, value in user_input_map.items():
+        index = features.index(feature_name)
+        mock_input_array[index] = value
+
+    # 3. Convert the array back to a DataFrame with the CORRECT column names
+    df = pd.DataFrame([mock_input_array], columns=features)
+    
+    # 4. Apply the fitted scaler (this is where the name validation happens)
+    # The scaler MUST be transformed on all 35 columns
     df[features] = scaler.transform(df[features])
     
-    # 3. Convert to NumPy array for DNN input: (1, 35)
+    # 5. Convert to NumPy array for DNN input: (1, 35)
     return df.values
+
 
 # --- 3. STREAMLIT APP LAYOUT ---
 
+st.set_page_config(page_title="Alzheimer's Predictor", layout="centered")
 st.title("🧠 Alzheimer's Multimodal Risk Predictor")
 st.markdown("---")
 
-model, scaler, CLINICAL_FEATURES = load_assets()
+model, scaler = load_assets()
 
 if model and scaler:
     
-    # --- Sidebar for Clinical Input (35 Features is too much, so we sample key inputs) ---
+    # --- Sidebar for Clinical Input (Simplified) ---
     with st.sidebar:
         st.header("Patient Clinical Data (Simplified)")
         
-        # NOTE: In a real app, you would need all 35 features. We simplify here.
-        
         # Gather key features
-        age = st.slider("Age", 50, 90, 70)
-        gender = st.selectbox("Gender", ["Male (1)", "Female (0)"])
-        bmi = st.number_input("BMI (e.g., 25.0)", min_value=15.0, max_value=50.0, value=25.0)
-        apoe_e4 = st.selectbox("APOE E4 Status", ["Negative (0)", "Positive (1)"])
-        mri_hippocampal_volume = st.slider("Hippocampal Volume (mm³)", 500.0, 5000.0, 3000.0)
+        age = st.slider("1. Age", 50, 90, 70, key='age')
+        gender = st.selectbox("2. Gender", ["Male", "Female"], key='gender')
+        bmi = st.number_input("3. BMI", min_value=15.0, max_value=50.0, value=25.0, step=0.1, key='bmi')
+        apoe_e4 = st.selectbox("4. APOE E4 Status", ["Negative", "Positive"], key='apoe')
+        mri_hippocampal_volume = st.slider("5. Hippocampal Volume (mm³)", 500.0, 5000.0, 3000.0, step=10.0, key='hipvol')
         
-        # --- Create a mock dictionary with ALL 35 features, filling unknown with mean/zero ---
-        # This is a critical simplification. The remaining features MUST be provided in the same format.
-        # For simplicity, we are filling missing features with a dummy value (e.g., 0.0 or 1.0)
-        # In a real app, these values would come from the full clinical profile.
+        st.markdown("_Note: Full prediction requires 35 features. Unlisted values are normalized placeholders._")
         
-        # Create a base dictionary of the 35 features filled with safe dummy values (e.g., mean)
-        # To avoid error, all features must be present. We set a dummy value (like 1.0) for features not collected via input.
-        
-        # Create a mock array for all 35 features (using placeholder 1.0 for features not in sidebar)
-        # This requires knowing the EXACT column order.
-        mock_input = np.ones((1, len(CLINICAL_FEATURES)))[0]
-        
-        # Map simplified user inputs to their correct index in the 35-feature array
-        # This requires knowing the index of each feature in CLINICAL_FEATURES
-        
-        # Example: Index 0=age, Index 1=gender_numeric, Index 3=bmi, Index 17=apoe_e4_status_numeric, Index 29=mri_hippocampal_volume
-        
-        # Mapped User Inputs
-        mock_input[0] = age
-        mock_input[1] = 1 if gender == "Male (1)" else 0
-        mock_input[3] = bmi
-        mock_input[17] = 1 if apoe_e4 == "Positive (1)" else 0
-        mock_input[29] = mri_hippocampal_volume
-        
-        # Convert the mock array back to a dictionary matching feature names
-        clinical_input_dict = dict(zip(CLINICAL_FEATURES, mock_input))
+        # Map user inputs to the exact feature names the scaler expects
+        user_input_map = {
+            'Age': age,
+            'Gender': 1 if gender == "Male" else 0,
+            'BMI': bmi,
+            'APOEE4Status': 1 if apoe_e4 == "Positive" else 0,
+            'MRIHippocampalVolume': mri_hippocampal_volume,
+        }
         
         
     # --- Main App Body for Image Input and Prediction ---
@@ -149,10 +147,10 @@ if model and scaler:
     st.header("MRI Scan Upload")
     uploaded_file = st.file_uploader("Upload T1-weighted MRI Scan (.jpg or .png)", type=['jpg', 'png'])
 
-    if st.button("Run Prediction", type="primary"):
+    if st.button("Run Multimodal Prediction", type="primary", use_container_width=True):
         if uploaded_file is not None:
             
-            with st.spinner("Analyzing data and running multimodal prediction..."):
+            with st.spinner("Analyzing clinical and image data..."):
                 
                 # --- 1. Preprocess Data ---
                 
@@ -161,14 +159,13 @@ if model and scaler:
                 
                 # Clinical Preprocessing
                 clinical_array = preprocess_clinical(
-                    clinical_input_dict, 
+                    user_input_map, 
                     scaler, 
                     CLINICAL_FEATURES
                 )
 
                 # --- 2. Run Multimodal Model ---
                 
-                # Model expects a dictionary of inputs: {'image_input': image_array, 'clinical_input': clinical_array}
                 predictions = model.predict({
                     'image_input': image_array, 
                     'clinical_input': clinical_array
@@ -180,21 +177,26 @@ if model and scaler:
                 
                 # --- 3. Display Results ---
                 
-                st.subheader("Prediction Results")
+                st.subheader("Final Prediction")
                 
-                if prob_demented > 0.5:
-                    st.error(f"Prediction: **Demented/MCI** (High Risk)")
-                    st.write(f"Confidence (Demented/MCI): **{prob_demented:.2f}**")
-                    st.write(f"Confidence (NonDemented): **{prob_non_demented:.2f}**")
-                    st.markdown("⚠️ **Action Recommended:** Consult a specialist for detailed diagnostic testing.")
+                prediction_class = "Demented/MCI" if prob_demented > 0.5 else "NonDemented"
+                
+                # Use markdown for styling the final result
+                if prediction_class == "Demented/MCI":
+                    st.error(f"## 🚨 Predicted Class: {prediction_class} (High Risk)")
                 else:
-                    st.success(f"Prediction: **NonDemented** (Low Risk)")
-                    st.write(f"Confidence (NonDemented): **{prob_non_demented:.2f}**")
-                    st.write(f"Confidence (Demented/MCI): **{prob_demented:.2f}**")
-                    st.markdown("✅ **Monitor:** Continue regular check-ups and healthy lifestyle.")
-
+                    st.success(f"## ✅ Predicted Class: {prediction_class} (Low Risk)")
+                    
+                
+                # Display confidence scores
+                col1, col2 = st.columns(2)
+                col1.metric("Confidence (NonDemented)", f"{prob_non_demented * 100:.1f}%")
+                col2.metric("Confidence (Demented/MCI)", f"{prob_demented * 100:.1f}%")
+                
                 st.markdown("---")
-                st.image(Image.open(uploaded_file), caption="Uploaded Scan (Pre-processed)", use_column_width=True)
+                
+                # Show the uploaded image
+                st.image(Image.open(uploaded_file), caption="Uploaded Scan", use_column_width=True)
                 
         else:
-            st.warning("Please upload an MRI scan image to run the prediction.")
+            st.warning("Please upload an MRI scan image to proceed with the prediction.")
