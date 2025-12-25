@@ -1,5 +1,9 @@
 import streamlit as st
-import tensorflow as tf
+try:
+    import tensorflow as tf
+except ModuleNotFoundError:
+    st.error("TensorFlow is not installed in this environment. Add `tensorflow` to your `requirements.txt` or run `pip install tensorflow` in your environment.")
+    st.stop()
 from tensorflow.keras.models import load_model
 import joblib
 import numpy as np
@@ -7,6 +11,7 @@ import pandas as pd
 import cv2
 from PIL import Image
 import os
+import io
 
 # --- 1. CONFIGURATION AND MODEL LOADING ---
 
@@ -134,8 +139,15 @@ if model and scaler:
         if uploaded_file is not None:
             with st.spinner("Analyzing MRI and clinical data..."):
 
+                # Save raw bytes so we can reuse for display and preprocessing
+                file_bytes = st.session_state.get("uploaded_image_bytes")
+                if file_bytes is None:
+                    # uploaded_file.read() consumes the buffer; read once and cache
+                    file_bytes = uploaded_file.read()
+                    st.session_state["uploaded_image_bytes"] = file_bytes
+
                 # --- 1. Preprocess MRI ---
-                image_array = preprocess_image(uploaded_file)
+                image_array = preprocess_image(io.BytesIO(file_bytes))
 
                 # --- 2. Clinical input depending on mode ---
                 if test_mode == "Full Multimodal (MRI + Clinical Data)":
@@ -162,18 +174,33 @@ if model and scaler:
                 # --- 4. Display ---
                 st.subheader("Prediction Results")
 
-                if prediction_class == "Demented/MCI":
-                    st.error(f"## 🚨 Predicted Class: {prediction_class} (High Risk)")
-                else:
-                    st.success(f"## ✅ Predicted Class: {prediction_class} (Low Risk)")
+                # Display image and metrics side-by-side
+                left, right = st.columns([1, 1])
 
-                col1, col2 = st.columns(2)
-                col1.metric("Confidence (NonDemented)", f"{prob_non_demented * 100:.1f}%")
-                col2.metric("Confidence (Demented/MCI)", f"{prob_demented * 100:.1f}%")
+                # Left: uploaded image (use cached bytes)
+                try:
+                    left.image(Image.open(io.BytesIO(file_bytes)), caption="Uploaded MRI Scan", use_column_width=True)
+                except Exception:
+                    left.warning("Could not display uploaded image preview.")
+
+                # Right: prediction text & confidence
+                if prediction_class == "Demented/MCI":
+                    right.error(f"## 🚨 Predicted Class: {prediction_class} (High Risk)")
+                else:
+                    right.success(f"## ✅ Predicted Class: {prediction_class} (Low Risk)")
+
+                right.metric("Confidence (NonDemented)", f"{prob_non_demented * 100:.1f}%")
+                right.metric("Confidence (Demented/MCI)", f"{prob_demented * 100:.1f}%")
 
                 st.markdown("---")
-                st.image(Image.open(uploaded_file), caption="Uploaded MRI Scan", use_column_width=True)
         else:
             st.warning("Please upload an MRI scan to proceed.")
+
+    # Cache uploaded bytes when a new file is provided (no immediate preview shown)
+    if uploaded_file is not None:
+        if (st.session_state.get("uploaded_image_name") != uploaded_file.name) or (st.session_state.get("uploaded_image_bytes") is None):
+            # read() consumes the file buffer so we store bytes for reuse during prediction
+            st.session_state["uploaded_image_bytes"] = uploaded_file.read()
+            st.session_state["uploaded_image_name"] = uploaded_file.name
 else:
     st.error("❌ Model or scaler failed to load. Please verify the files exist in the 'models' folder.")
