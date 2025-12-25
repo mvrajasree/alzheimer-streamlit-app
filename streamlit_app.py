@@ -1,4 +1,20 @@
 import streamlit as st
+
+# TensorFlow may not be installed in some deployment environments.
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+except ModuleNotFoundError:
+    st.error("TensorFlow is not installed in this environment. Add `tensorflow` to your `requirements.txt` or run `pip install tensorflow` in your environment.")
+    st.stop()
+    
+import joblib
+import numpy as np
+import pandas as pd
+import cv2
+from PIL import Image
+import os
+import io
 try:
     import tensorflow as tf
 except ModuleNotFoundError:
